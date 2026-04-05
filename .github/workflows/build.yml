@@ -1,4 +1,4 @@
-name: Swift Build
+name: Swift Build + E2E Protocol Check
 
 on:
   push:
@@ -7,11 +7,42 @@ on:
     branches: [main]
 
 jobs:
-  build:
+  swift-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build Swift Package
         run: swift build
-      - name: Run tests
-        run: swift test || echo "No tests yet"
+      - name: Run Swift tests
+        run: swift test
+
+  e2e-protocol:
+    runs-on: ubuntu-latest
+    name: E2E - 验证服务端协议与 iOS CSIFrame 兼容性
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout ruview-server
+        uses: actions/checkout@v4
+        with:
+          repository: hcwang/joycode-ruview-server
+          path: ruview-server
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install server dependencies
+        run: pip install -r ruview-server/requirements.txt websockets
+
+      - name: Start ruview-server
+        run: |
+          cd ruview-server
+          uvicorn app:app --host 0.0.0.0 --port 8080 &
+          echo "等待服务启动..."
+          for i in $(seq 1 10); do
+            curl -sf http://localhost:8080/health && break || sleep 1
+          done
+
+      - name: Run iOS E2E protocol check
+        run: python scripts/e2e_protocol_check.py
